@@ -404,16 +404,21 @@ function uid(){return '_'+Math.random().toString(36).slice(2,9);}
 function activeCab(){return cabs.find(c=>c.id===activeCabId);}
 
 // ── apply remote data ──
+function toSortedArray(obj) {
+  if(!obj) return [];
+  if(Array.isArray(obj)) return obj;
+  return Object.values(obj).sort((a,b)=>(a._order||0)-(b._order||0));
+}
 window._applyRemoteData = (raw) => {
-  const newCabs = Object.values(raw || {});
-  // fix arrays (firebase may convert arrays to objects)
+  // Convert Firebase objects back to sorted arrays using _order timestamp
+  const newCabs = toSortedArray(raw);
   newCabs.forEach(cab => {
-    if(cab.rows && !Array.isArray(cab.rows)) cab.rows = Object.values(cab.rows);
-    (cab.rows||[]).forEach(row => {
-      if(row.slots && !Array.isArray(row.slots)) row.slots = Object.values(row.slots);
-      if(row.items && !Array.isArray(row.items)) row.items = Object.values(row.items);
+    cab.rows = toSortedArray(cab.rows);
+    cab.rows.forEach(row => {
+      if(row.type === 'hook') row.slots = toSortedArray(row.slots);
+      else row.items = toSortedArray(row.items);
       (row.slots||[]).forEach(slot => {
-        if(slot.layers && !Array.isArray(slot.layers)) slot.layers = Object.values(slot.layers);
+        slot.layers = toSortedArray(slot.layers);
       });
     });
   });
@@ -472,10 +477,11 @@ function saveCab(){
     if(cab){cab.num=num;cab.brand=brand;cab.pm=pm;}
   }else{
     const id=uid();
+    const t=Date.now();
     const firstRow=firstRowType==='shelf'
-      ?{id:uid(),label:'P1',type:'shelf',items:[]}
-      :{id:uid(),label:'P1',type:'hook',slots:[]};
-    cabs.push({id,num,brand,pm,rows:[firstRow]});
+      ?{id:uid(),label:'P1',type:'shelf',items:[],_order:t+1}
+      :{id:uid(),label:'P1',type:'hook',slots:[],_order:t+1};
+    cabs.push({id,num,brand,pm,rows:[firstRow],_order:t});
     activeCabId=id;
   }
   saveDB();closeMod('cab-modal');
@@ -495,8 +501,9 @@ function openAddRow(cabId){addRowCabId=cabId;openMod('row-type-modal');}
 function addRow(type){
   const cab=cabs.find(c=>c.id===addRowCabId);if(!cab)return;
   const pIdx=cab.rows.length;
-  if(type==='hook'){cab.rows.push({id:uid(),label:'P'+(pIdx+1),type:'hook',slots:[]});}
-  else{cab.rows.push({id:uid(),label:'P'+(pIdx+1),type:'shelf',items:[]});}
+  const rt=Date.now();
+  if(type==='hook'){cab.rows.push({id:uid(),label:'P'+(pIdx+1),type:'hook',slots:[],_order:rt});}
+  else{cab.rows.push({id:uid(),label:'P'+(pIdx+1),type:'shelf',items:[],_order:rt});}
   saveDB();closeMod('row-type-modal');
 }
 function deleteRow(cabId,rowId){
@@ -506,7 +513,7 @@ function deleteRow(cabId,rowId){
 function addHookSlot(cabId,rowId){
   const cab=cabs.find(c=>c.id===cabId);const row=cab.rows.find(r=>r.id===rowId);
   if((row.slots||[]).length>=MAX_HOOKS){toast('此排已達上限 '+MAX_HOOKS+' 格');return;}
-  row.slots.push({id:uid(),layers:[],w:SLOT_W,h:SLOT_H});saveDB();
+  row.slots.push({id:uid(),layers:[],w:SLOT_W,h:SLOT_H,_order:Date.now()});saveDB();
 }
 function deleteHookSlot(cabId,rowId,slotId){
   const cab=cabs.find(c=>c.id===cabId);const row=cab.rows.find(r=>r.id===rowId);
@@ -518,7 +525,7 @@ function deleteHookSlot(cabId,rowId,slotId){
 // ── product modal ──
 function clearProdForm(){['pm-name','pm-code','pm-model','pm-qty'].forEach(i=>document.getElementById(i).value='');prodColor='c0';renderSwatches('prod-swatches',prodColor,c=>{prodColor=c;});}
 function fillProdForm(p){document.getElementById('pm-name').value=p.name||'';document.getElementById('pm-code').value=p.code||'';document.getElementById('pm-model').value=p.model||'';document.getElementById('pm-qty').value=p.qty||'';prodColor=p.color||'c0';renderSwatches('prod-swatches',prodColor,c=>{prodColor=c;});}
-function prodData(){return{id:uid(),name:document.getElementById('pm-name').value.trim(),code:document.getElementById('pm-code').value.trim(),model:document.getElementById('pm-model').value.trim(),qty:document.getElementById('pm-qty').value.trim(),color:prodColor};}
+function prodData(){return{id:uid(),name:document.getElementById('pm-name').value.trim(),code:document.getElementById('pm-code').value.trim(),model:document.getElementById('pm-model').value.trim(),qty:document.getElementById('pm-qty').value.trim(),color:prodColor,_order:Date.now()};}
 function openAddLayerProd(cabId,rowId,slotId){prodTarget={mode:'hook-layer-new',cabId,rowId,slotId};clearProdForm();document.getElementById('prod-modal-title').textContent='新增商品';document.getElementById('paste-hint').textContent=clipboard?'剪貼簿：'+(clipboard.name||'（空）'):'';openMod('prod-modal');}
 function openEditLayerProd(cabId,rowId,slotId,layerIdx){const slot=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId).slots.find(s=>s.id===slotId);fillProdForm(slot.layers[layerIdx]);prodTarget={mode:'hook-layer-edit',cabId,rowId,slotId,layerIdx};document.getElementById('prod-modal-title').textContent='編輯商品';document.getElementById('paste-hint').textContent=clipboard?'剪貼簿：'+(clipboard.name||'（空）'):'';openMod('prod-modal');}
 function openAddShelfProd(cabId,rowId){prodTarget={mode:'shelf-new',cabId,rowId};clearProdForm();document.getElementById('prod-modal-title').textContent='新增層板商品';document.getElementById('paste-hint').textContent=clipboard?'剪貼簿：'+(clipboard.name||'（空）'):'';openMod('prod-modal');}
@@ -635,8 +642,9 @@ function importData(e){
 // ── render ──
 function render(){
   // tabs — always include + button
+  const sortedCabs=[...cabs].sort((a,b)=>(a._order||0)-(b._order||0));
   document.getElementById('tab-bar').innerHTML=
-    cabs.map(cab=>`<div class="tab ${cab.id===activeCabId?'active':''}" onclick="switchTab('${cab.id}')">
+    sortedCabs.map(cab=>`<div class="tab ${cab.id===activeCabId?'active':''}" onclick="switchTab('${cab.id}')">
       <span>${cab.num}櫃</span>
       <span style="opacity:.55;font-size:10px;max-width:70px;overflow:hidden;text-overflow:ellipsis;">${cab.brand}</span>
       <button class="tab-close" onclick="event.stopPropagation();deleteCab('${cab.id}')" title="刪除此櫃位"><i class="ti ti-x" aria-hidden="true"></i></button>
@@ -699,7 +707,7 @@ function render(){
         </div>`;
       }).join('');
       const ghost=slots.length<MAX_HOOKS
-        ?`<div class="add-slot-ghost" onclick="addHookSlot('${cab.id}','${row.id}')" title="新增格位" style="width:${SLOT_W}px;height:${SLOT_H}px;"><i class="ti ti-plus" aria-hidden="true"></i></div>`:'';
+        ?`<div class="add-slot-ghost" onclick="addHookSlot('${cab.id}','${row.id}')" title="新增格位" style="width:${SLOT_W}px;height:${SLOT_H}px;min-height:${SLOT_H}px;flex-shrink:0;"><i class="ti ti-plus" style="font-size:22px;" aria-hidden="true"></i><div style="font-size:10px;margin-top:4px;opacity:.6;">新增格</div></div>`:'';
       content=`<div class="hook-row-inner">${slotsHTML}${ghost}</div>`;
     }else{
       const items=row.items||[];
