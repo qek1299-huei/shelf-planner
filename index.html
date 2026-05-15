@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>門市陳列規劃工具</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/1.119.0/iconfont/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f4f4f4;color:#111;min-height:100vh;}
+:root{--gap-slot:5px;--gap-row:10px;--slot-w:100px;--slot-h:150px;--shelf-h:200px;}
+
+/* ── sync status ── */
+#sync-bar{display:flex;align-items:center;gap:6px;padding:4px 14px;font-size:11px;background:#111;color:#fff;}
+#sync-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0;}
+#sync-dot.saving{background:#facc15;}
+#sync-dot.offline{background:#f87171;}
+
+/* ── top bar ── */
+.top-bar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#fff;border-bottom:1px solid #e5e5e5;flex-wrap:wrap;position:sticky;top:0;z-index:50;}
+.top-bar h1{font-size:15px;font-weight:600;flex:1;min-width:120px;}
+.top-bar button{font-size:12px;padding:5px 11px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+.top-bar button:hover{background:#f5f5f5;}
+
+/* ── tabs ── */
+.tab-bar{display:flex;align-items:stretch;background:#fff;border-bottom:2px solid #e5e5e5;overflow-x:auto;padding:0 14px;position:sticky;top:41px;z-index:40;}
+.tab{display:flex;align-items:center;gap:5px;padding:7px 13px;font-size:12px;cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-2px;white-space:nowrap;color:#666;transition:color .1s;}
+.tab.active{color:#111;font-weight:600;border-bottom-color:#111;}
+.tab:hover{color:#111;}
+.tab-close{background:none;border:none;cursor:pointer;font-size:12px;color:#bbb;padding:0 1px;line-height:1;border-radius:2px;}
+.tab-close:hover{color:#dc2626;}
+.tab-add{display:flex;align-items:center;padding:7px 10px;font-size:20px;cursor:pointer;color:#bbb;border-bottom:2px solid transparent;margin-bottom:-2px;}
+.tab-add:hover{color:#111;}
+
+/* ── multi select toolbar ── */
+.multi-bar{display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 14px;background:#eff6ff;border-bottom:1px solid #93c5fd;font-size:12px;color:#1e40af;}
+.multi-bar.show{display:flex;}
+.multi-bar label{font-size:11px;white-space:nowrap;}
+.multi-bar input[type=number]{width:58px;padding:2px 5px;font-size:12px;border:1px solid #93c5fd;border-radius:4px;}
+.multi-bar button{font-size:11px;padding:3px 9px;border:1px solid #93c5fd;border-radius:4px;background:#fff;cursor:pointer;color:#1e40af;display:inline-flex;align-items:center;gap:3px;}
+.multi-bar button:hover{background:#dbeafe;}
+.msep{width:1px;height:18px;background:#93c5fd;opacity:.5;margin:0 2px;}
+.swatches{display:flex;gap:4px;flex-wrap:wrap;}
+.swatch{width:18px;height:18px;border-radius:3px;cursor:pointer;border:2px solid transparent;flex-shrink:0;}
+.swatch.active,.swatch:hover{border-color:#111;}
+.swatch-lg{width:22px;height:22px;border-radius:4px;}
+
+/* ── main content ── */
+#main{padding:0;}
+
+/* ── cabinet page ── */
+.cab-page{padding:20px 16px 48px;max-width:1200px;margin:0 auto;}
+.cab-title{text-align:center;font-size:26px;font-weight:700;margin-bottom:4px;letter-spacing:.01em;}
+.cab-sub{text-align:center;font-size:12px;color:#888;margin-bottom:14px;}
+.cab-actions{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:22px;flex-wrap:wrap;}
+.cab-actions button{font-size:12px;padding:5px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+.cab-actions button:hover{background:#f5f5f5;}
+.save-img-btn{background:#111!important;color:#fff!important;border-color:#111!important;}
+.save-img-btn:hover{background:#333!important;}
+
+/* ── rows ── */
+.rows-container{display:flex;flex-direction:column;gap:var(--gap-row);}
+.row-wrap{display:flex;align-items:stretch;}
+.row-sidebar{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:46px;min-width:46px;background:#f3f3f3;border:1px solid #ddd;border-right:none;border-radius:6px 0 0 6px;padding:6px 3px;cursor:grab;user-select:none;}
+.row-sidebar:active{cursor:grabbing;}
+.row-sidebar.drag-over-row{background:#dbeafe;}
+.row-label{font-size:10px;font-weight:700;color:#333;}
+.row-type-tag{font-size:9px;padding:1px 4px;border-radius:3px;}
+.hook-tag{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;}
+.shelf-tag{background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;}
+.row-count{font-size:9px;color:#aaa;}
+.row-grip{font-size:13px;color:#ccc;}
+.row-sidebar-btn{background:none;border:none;cursor:pointer;font-size:14px;color:#bbb;padding:1px;border-radius:3px;line-height:1;}
+.row-sidebar-btn:hover{color:#333;background:#e5e5e5;}
+.row-sidebar-btn.red:hover{color:#dc2626;background:#fee2e2;}
+.slots-area{flex:1;border:1px solid #ddd;border-radius:0 6px 6px 0;padding:8px;min-height:60px;background:#fafafa;overflow-x:auto;}
+
+/* ── hook slots ── */
+.hook-row-inner{display:flex;flex-wrap:wrap;gap:var(--gap-slot);align-items:flex-start;}
+.hook-slot{position:relative;border-radius:6px;border:1.5px solid #ddd;background:#fff;display:flex;flex-direction:column;cursor:pointer;overflow:hidden;transition:border-color .12s,box-shadow .12s;flex-shrink:0;}
+.hook-slot:hover{border-color:#888;}
+.hook-slot.selected{border-color:#2563eb;box-shadow:0 0 0 2.5px #93c5fd;}
+.hook-slot.drag-over-slot{border:2px dashed #2563eb;background:#eff6ff;}
+.hook-slot.dragging-slot{opacity:.35;}
+.slot-topbar{display:flex;align-items:center;justify-content:space-between;padding:2px 4px;flex-shrink:0;background:rgba(0,0,0,.02);}
+.slot-lbl{font-size:8px;color:#ccc;line-height:1;}
+.slot-del-btn{background:none;border:none;cursor:pointer;font-size:11px;color:#ccc;padding:0;line-height:1;}
+.slot-del-btn:hover{color:#dc2626;}
+.hook-layer{padding:5px 6px;border-top:1px dashed #eee;position:relative;cursor:pointer;text-align:center;}
+.hook-layer:first-child{border-top:none;}
+.hook-layer:hover{background:rgba(0,0,0,.03);}
+.l-name{font-size:11px;font-weight:500;line-height:1.35;word-break:break-all;white-space:normal;text-align:center;}
+.l-model{font-size:10px;color:#777;line-height:1.2;text-align:center;}
+.l-qty{font-size:10px;color:#aaa;text-align:center;}
+.slot-empty{display:flex;align-items:center;justify-content:center;flex:1;color:#ddd;font-size:24px;}
+.slot-add-btn{display:flex;align-items:center;justify-content:center;gap:2px;font-size:10px;color:#bbb;padding:2px 4px;border-top:1px dashed #eee;background:none;border-left:none;border-right:none;border-bottom:none;cursor:pointer;width:100%;flex-shrink:0;line-height:1.6;}
+.slot-add-btn:hover{background:#f5f5f5;color:#333;}
+.sel-dot{position:absolute;bottom:3px;left:3px;width:10px;height:10px;border-radius:50%;border:1.5px solid #ddd;background:#fff;cursor:pointer;z-index:3;}
+.hook-slot.selected .sel-dot{background:#2563eb;border-color:#1d4ed8;}
+.resize-handle{position:absolute;bottom:0;right:0;width:14px;height:14px;cursor:se-resize;z-index:3;}
+.resize-handle::after{content:'';position:absolute;bottom:3px;right:3px;width:6px;height:6px;border-right:2px solid #bbb;border-bottom:2px solid #bbb;}
+.resize-handle:hover::after{border-color:#333;}
+.add-slot-ghost{border-radius:6px;border:1.5px dashed #93c5fd;background:#eff6ff;display:flex;align-items:center;justify-content:center;font-size:24px;color:#93c5fd;cursor:pointer;flex-shrink:0;transition:background .12s;}
+.add-slot-ghost:hover{background:#dbeafe;}
+
+/* ── shelf ── */
+.shelf-row-inner{display:flex;gap:var(--gap-slot);align-items:stretch;flex-wrap:nowrap;overflow-x:auto;}
+.shelf-item{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;border-radius:5px;border:1.5px solid #ddd;background:#fff;cursor:pointer;position:relative;min-width:90px;flex:1;text-align:center;transition:border-color .12s;}
+.shelf-item:hover{border-color:#888;}
+.shelf-item.selected{border-color:#2563eb;box-shadow:0 0 0 2px #93c5fd;}
+.shelf-item.dragging-shelf{opacity:.35;}
+.shelf-item.drag-over-shelf{border:2px dashed #2563eb;background:#eff6ff;}
+.si-dot{width:9px;height:9px;border-radius:50%;margin-bottom:5px;flex-shrink:0;}
+.si-name{font-size:12px;font-weight:500;line-height:1.35;word-break:break-all;white-space:normal;text-align:center;}
+.si-model{font-size:10px;color:#888;text-align:center;margin-top:2px;}
+.si-qty{font-size:10px;color:#aaa;text-align:center;margin-top:2px;}
+.shelf-add-slot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;color:#bbb;border:1.5px dashed #ddd;border-radius:5px;padding:8px 14px;cursor:pointer;min-width:80px;flex-shrink:0;transition:all .12s;}
+.shelf-add-slot:hover{border-color:#888;color:#333;background:#f5f5f5;}
+.sel-dot-shelf{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;border:1.5px solid #ddd;background:#fff;cursor:pointer;z-index:2;}
+.shelf-item.selected .sel-dot-shelf{background:#2563eb;border-color:#1d4ed8;}
+
+/* ── add row ── */
+.add-row-btn{margin-top:12px;}
+.add-row-btn button{font-size:12px;padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
+.add-row-btn button:hover{background:#f5f5f5;}
+
+/* ── screenshot mode ── */
+.screenshot-mode .cab-actions,
+.screenshot-mode .multi-bar,
+.screenshot-mode .tab-bar,
+.screenshot-mode .top-bar,
+.screenshot-mode #sync-bar,
+.screenshot-mode .add-row-btn,
+.screenshot-mode .row-sidebar-btn,
+.screenshot-mode .row-grip,
+.screenshot-mode .sel-dot,
+.screenshot-mode .sel-dot-shelf,
+.screenshot-mode .resize-handle,
+.screenshot-mode .slot-del-btn,
+.screenshot-mode .slot-add-btn,
+.screenshot-mode .shelf-add-slot,
+.screenshot-mode .add-slot-ghost{display:none!important;}
+.screenshot-mode .row-sidebar{cursor:default!important;width:40px;min-width:40px;}
+.screenshot-mode .hook-slot,.screenshot-mode .shelf-item,.screenshot-mode .hook-layer{cursor:default!important;}
+.screenshot-mode #main{padding:0;}
+.screenshot-mode .cab-page{padding:16px;}
+
+/* ── empty ── */
+.empty-state{text-align:center;padding:60px 20px;color:#bbb;}
+.empty-state i{font-size:44px;display:block;margin-bottom:12px;opacity:.4;}
+.empty-state p{font-size:13px;}
+
+/* ── toast ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111;color:#fff;font-size:12px;padding:7px 18px;border-radius:20px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:999;white-space:nowrap;}
+.toast.show{opacity:1;}
+
+/* ── modals ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;padding:12px;}
+.modal-bg.open{display:flex;}
+.modal{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:360px;max-height:92vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.2);}
+.modal h3{font-size:15px;font-weight:600;margin-bottom:14px;}
+.modal label{font-size:11px;color:#666;display:block;margin-top:10px;margin-bottom:3px;}
+.modal input,.modal select,.modal textarea{width:100%;padding:6px 9px;font-size:13px;border:1px solid #ddd;border-radius:6px;outline:none;}
+.modal input:focus,.modal textarea:focus{border-color:#2563eb;}
+.modal textarea{resize:vertical;min-height:52px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap;}
+.modal-actions button{font-size:12px;padding:7px 15px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff;display:inline-flex;align-items:center;gap:4px;}
+.modal-actions button:hover{background:#f5f5f5;}
+.btn-primary{background:#111!important;color:#fff!important;border-color:#111!important;}
+.btn-primary:hover{background:#333!important;}
+.btn-danger{background:#dc2626!important;color:#fff!important;border-color:#dc2626!important;}
+.btn-danger:hover{background:#b91c1c!important;}
+.confirm-icon{text-align:center;font-size:32px;color:#dc2626;margin-bottom:8px;}
+.type-picker{display:flex;gap:10px;margin-top:10px;}
+.type-btn{flex:1;padding:12px 8px;border:1.5px solid #ddd;border-radius:8px;cursor:pointer;text-align:center;font-size:12px;background:#fff;transition:all .12s;}
+.type-btn:hover{border-color:#2563eb;background:#eff6ff;color:#1e40af;}
+.type-btn i{display:block;font-size:24px;margin-bottom:5px;}
+.paste-hint{font-size:10px;color:#aaa;margin-top:5px;}
+
+/* ── users online indicator ── */
+.online-users{display:flex;align-items:center;gap:5px;}
+.user-dot{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;margin-left:-4px;border:2px solid #fff;}
+</style>
+</head>
+<body>
+
+<div id="sync-bar">
+  <div id="sync-dot"></div>
+  <span id="sync-msg">連線中...</span>
+  <span style="margin-left:auto;display:flex;align-items:center;gap:4px;">
+    <i class="ti ti-users" style="font-size:13px;opacity:.6"></i>
+    <span id="online-count" style="font-size:11px;opacity:.7">--</span> 人在線
+  </span>
+</div>
+
+<div class="top-bar">
+  <h1><i class="ti ti-layout-grid" style="font-size:16px;vertical-align:-2px;margin-right:5px" aria-hidden="true"></i>門市陳列規劃工具</h1>
+  <button onclick="exportData()"><i class="ti ti-download" aria-hidden="true"></i> 備份匯出</button>
+  <button onclick="importTrigger()"><i class="ti ti-upload" aria-hidden="true"></i> 匯入備份</button>
+  <input type="file" id="import-file" style="display:none" accept=".json" onchange="importData(event)">
+</div>
+
+<div class="multi-bar" id="multi-bar">
+  <i class="ti ti-checkbox" aria-hidden="true"></i><b id="sel-count">0</b> 已選取
+  <div class="msep"></div>
+  <label>寬</label><input type="number" id="bw" placeholder="px" min="60" max="400">
+  <label>高</label><input type="number" id="bh" placeholder="px" min="60" max="400">
+  <button onclick="applyBulkSize()"><i class="ti ti-resize" aria-hidden="true"></i> 套用</button>
+  <span style="font-size:10px;color:#6b9fd4;">或拖右下角縮放</span>
+  <div class="msep"></div>
+  <span style="font-size:11px;">顏色</span>
+  <div class="swatches" id="bulk-swatches"></div>
+  <div class="msep"></div>
+  <button onclick="clearSel()">取消選取</button>
+</div>
+
+<div class="tab-bar" id="tab-bar"></div>
+<div id="main"></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 新增/編輯櫃位 -->
+<div class="modal-bg" id="cab-modal">
+  <div class="modal">
+    <h3 id="cab-modal-title">新增櫃位</h3>
+    <label>櫃號</label><input id="cm-num" placeholder="e.g. 11">
+    <label>品牌 / 名稱</label><input id="cm-brand" placeholder="e.g. Q哥充電頭">
+    <label>PM負責人</label><input id="cm-pm" placeholder="e.g. 龍">
+    <div id="cm-type-wrap">
+      <label>第一排類型</label>
+      <div class="type-picker">
+        <div class="type-btn" onclick="setFirstRowType('hook')" id="type-hook-btn"><i class="ti ti-git-commit" aria-hidden="true"></i>勾子排</div>
+        <div class="type-btn" onclick="setFirstRowType('shelf')" id="type-shelf-btn"><i class="ti ti-layout-rows" aria-hidden="true"></i>層板排</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeMod('cab-modal')">取消</button>
+      <button class="btn-primary" onclick="saveCab()"><i class="ti ti-check" aria-hidden="true"></i> 儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增排 -->
+<div class="modal-bg" id="row-type-modal">
+  <div class="modal">
+    <h3>選擇排列類型</h3>
+    <div class="type-picker">
+      <div class="type-btn" onclick="addRow('hook')"><i class="ti ti-git-commit" aria-hidden="true"></i>勾子排<br><small style="color:#888;font-size:10px;">可疊加多品<br>上下排列</small></div>
+      <div class="type-btn" onclick="addRow('shelf')"><i class="ti ti-layout-rows" aria-hidden="true"></i>層板排<br><small style="color:#888;font-size:10px;">左右並排<br>可拖曳換位</small></div>
+    </div>
+    <div class="modal-actions"><button onclick="closeMod('row-type-modal')">取消</button></div>
+  </div>
+</div>
+
+<!-- 新增/編輯商品 -->
+<div class="modal-bg" id="prod-modal">
+  <div class="modal">
+    <h3 id="prod-modal-title">新增商品</h3>
+    <label>商品名稱</label><textarea id="pm-name" rows="2" placeholder="e.g. Q哥 PD快充充電頭 20W"></textarea>
+    <label>代號</label><input id="pm-code" placeholder="e.g. QG-CH20">
+    <label>樣式 / 型號</label><input id="pm-model" placeholder="e.g. 白色 / QG-PD20W">
+    <label>數量</label><input id="pm-qty" placeholder="e.g. 3">
+    <label>顏色標記</label>
+    <div class="swatches" id="prod-swatches" style="margin-top:6px;"></div>
+    <div class="paste-hint" id="paste-hint"></div>
+    <div class="modal-actions">
+      <button onclick="pasteClip()"><i class="ti ti-clipboard" aria-hidden="true"></i> 貼上</button>
+      <button onclick="closeMod('prod-modal')">取消</button>
+      <button class="btn-primary" onclick="saveProd()"><i class="ti ti-check" aria-hidden="true"></i> 儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 商品詳情 -->
+<div class="modal-bg" id="detail-modal">
+  <div class="modal">
+    <h3 id="dm-title">商品資訊</h3>
+    <div id="dm-body" style="font-size:13px;line-height:2;color:#444;margin-bottom:8px;background:#f9f9f9;border-radius:6px;padding:10px 12px;"></div>
+    <div class="modal-actions">
+      <button class="btn-danger" id="dm-delete-btn"><i class="ti ti-trash" aria-hidden="true"></i> 刪除</button>
+      <button onclick="openEditFromDetail()"><i class="ti ti-edit" aria-hidden="true"></i> 編輯</button>
+      <button onclick="closeMod('detail-modal')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 確認刪除 -->
+<div class="modal-bg" id="confirm-modal">
+  <div class="modal">
+    <div class="confirm-icon"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
+    <h3 style="text-align:center" id="confirm-title">確認刪除？</h3>
+    <p id="confirm-msg" style="font-size:13px;color:#666;text-align:center;margin-top:8px;line-height:1.6"></p>
+    <div class="modal-actions" style="justify-content:center;margin-top:14px;">
+      <button onclick="closeMod('confirm-modal')">取消，保留</button>
+      <button class="btn-danger" id="confirm-ok"><i class="ti ti-trash" aria-hidden="true"></i> 確認刪除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, update, remove, push, serverTimestamp, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDGoBCMkxoQGTLxDz0Yf3KHNAYgigN0n0U",
+  authDomain: "shelf-planner-28f50.firebaseapp.com",
+  databaseURL: "https://shelf-planner-28f50-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "shelf-planner-28f50",
+  storageBucket: "shelf-planner-28f50.firebasestorage.app",
+  messagingSenderId: "759215301668",
+  appId: "1:759215301668:web:4c052eca586a530620a4b1"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// ── online presence ──
+const sessionId = Math.random().toString(36).slice(2, 8);
+const presenceRef = ref(db, `presence/${sessionId}`);
+const allPresenceRef = ref(db, 'presence');
+set(presenceRef, { t: Date.now() });
+onDisconnect(presenceRef).remove();
+
+onValue(allPresenceRef, snap => {
+  const count = snap.exists() ? Object.keys(snap.val()).length : 0;
+  document.getElementById('online-count').textContent = count;
+});
+
+// ── sync state ──
+const dot = document.getElementById('sync-dot');
+const msg = document.getElementById('sync-msg');
+let saveTimer = null;
+
+window._fbSet = async (path, data) => {
+  dot.className = 'saving'; msg.textContent = '儲存中...';
+  try {
+    await set(ref(db, path), data);
+    dot.className = ''; dot.style.background = '#4ade80'; msg.textContent = '已同步';
+  } catch(e) {
+    dot.className = 'offline'; msg.textContent = '同步失敗';
+  }
+};
+
+window._fbRemove = async (path) => {
+  await remove(ref(db, path)).catch(()=>{});
+};
+
+// ── listen to data ──
+onValue(ref(db, 'cabs'), snap => {
+  const raw = snap.exists() ? snap.val() : {};
+  // convert object to ordered array
+  window._remoteData = raw;
+  window._applyRemoteData(raw);
+  dot.style.background = '#4ade80'; dot.className = ''; msg.textContent = '已同步';
+}, err => {
+  dot.className = 'offline'; msg.textContent = '離線 / 無法連線';
+});
+
+window._saveDB = (cabs) => {
+  // convert array to object keyed by id
+  const obj = {};
+  cabs.forEach(c => { obj[c.id] = c; });
+  window._fbSet('cabs', obj);
+};
+
+window._deleteDoc = (cabId) => window._fbRemove(`cabs/${cabId}`);
+</script>
+
+<script>
+// ── constants ──
+const SLOT_W=100, SLOT_H=150, SHELF_H=200, MAX_HOOKS=20;
+const COLORS=[
+  {id:'c0',hex:'#F2F2F2',label:'無色'},{id:'c1',hex:'#FFD6D6',label:'紅'},
+  {id:'c2',hex:'#FFE8C2',label:'橙'},{id:'c3',hex:'#FFFAC2',label:'黃'},
+  {id:'c4',hex:'#D6F5D6',label:'綠'},{id:'c5',hex:'#C2E8FF',label:'藍'},
+  {id:'c6',hex:'#E2D6FF',label:'紫'},{id:'c7',hex:'#FFD6F5',label:'粉'},
+  {id:'c8',hex:'#D6F5F5',label:'青'},{id:'c9',hex:'#FFE8D6',label:'膚'},
+];
+function hb(h){const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return`rgb(${Math.max(0,r-55)},${Math.max(0,g-55)},${Math.max(0,b-55)})`;}
+function cs(cid){const c=COLORS.find(x=>x.id===(cid||'c0'))||COLORS[0];return{bg:c.hex,bd:hb(c.hex)};}
+
+// ── local state ──
+let cabs = [];
+let activeCabId = null;
+let sel = new Set();
+let clipboard = null;
+let confirmCb = null;
+let prodColor = 'c0';
+let prodTarget = null;
+let detailTarget = null;
+let editCabId = null;
+let addRowCabId = null;
+let firstRowType = 'hook';
+let dragSlotKey = null;
+let dragShelfSrc = null;
+let dragRowKey = null;
+let resizing = null;
+
+function uid(){return '_'+Math.random().toString(36).slice(2,9);}
+function activeCab(){return cabs.find(c=>c.id===activeCabId);}
+
+// ── apply remote data ──
+window._applyRemoteData = (raw) => {
+  const newCabs = Object.values(raw || {});
+  // fix arrays (firebase may convert arrays to objects)
+  newCabs.forEach(cab => {
+    if(cab.rows && !Array.isArray(cab.rows)) cab.rows = Object.values(cab.rows);
+    (cab.rows||[]).forEach(row => {
+      if(row.slots && !Array.isArray(row.slots)) row.slots = Object.values(row.slots);
+      if(row.items && !Array.isArray(row.items)) row.items = Object.values(row.items);
+      (row.slots||[]).forEach(slot => {
+        if(slot.layers && !Array.isArray(slot.layers)) slot.layers = Object.values(slot.layers);
+      });
+    });
+  });
+  cabs = newCabs;
+  if(!activeCabId && cabs.length) activeCabId = cabs[0].id;
+  if(activeCabId && !cabs.find(c=>c.id===activeCabId)) activeCabId = cabs.length ? cabs[0].id : null;
+  render();
+};
+
+function saveDB(){
+  if(window._saveDB) window._saveDB(cabs);
+}
+
+// ── toast ──
+function toast(msg,dur=1800){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
+
+// ── confirm ──
+function confirm2(title,msg,cb){document.getElementById('confirm-title').textContent=title;document.getElementById('confirm-msg').textContent=msg;confirmCb=cb;openMod('confirm-modal');}
+document.getElementById('confirm-ok').onclick=()=>{if(confirmCb)confirmCb();closeMod('confirm-modal');confirmCb=null;};
+function openMod(id){document.getElementById(id).classList.add('open');}
+function closeMod(id){document.getElementById(id).classList.remove('open');}
+
+// ── cabinet ──
+function setFirstRowType(t){
+  firstRowType=t;
+  document.getElementById('type-hook-btn').style.borderColor=t==='hook'?'#2563eb':'#ddd';
+  document.getElementById('type-hook-btn').style.background=t==='hook'?'#eff6ff':'#fff';
+  document.getElementById('type-shelf-btn').style.borderColor=t==='shelf'?'#2563eb':'#ddd';
+  document.getElementById('type-shelf-btn').style.background=t==='shelf'?'#eff6ff':'#fff';
+}
+function openNewCab(){
+  editCabId=null;firstRowType='hook';
+  document.getElementById('cab-modal-title').textContent='新增櫃位';
+  ['cm-num','cm-brand','cm-pm'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('cm-type-wrap').style.display='';
+  setFirstRowType('hook');
+  openMod('cab-modal');
+}
+function openEditCab(cabId){
+  const cab=cabs.find(c=>c.id===cabId);if(!cab)return;
+  editCabId=cabId;
+  document.getElementById('cab-modal-title').textContent='編輯櫃位';
+  document.getElementById('cm-num').value=cab.num||'';
+  document.getElementById('cm-brand').value=cab.brand||'';
+  document.getElementById('cm-pm').value=cab.pm||'';
+  document.getElementById('cm-type-wrap').style.display='none';
+  openMod('cab-modal');
+}
+function saveCab(){
+  const num=document.getElementById('cm-num').value.trim();
+  const brand=document.getElementById('cm-brand').value.trim();
+  const pm=document.getElementById('cm-pm').value.trim();
+  if(!num){toast('請填寫櫃號');return;}
+  if(editCabId){
+    const cab=cabs.find(c=>c.id===editCabId);
+    if(cab){cab.num=num;cab.brand=brand;cab.pm=pm;}
+  }else{
+    const id=uid();
+    const firstRow=firstRowType==='shelf'
+      ?{id:uid(),label:'P1',type:'shelf',items:[]}
+      :{id:uid(),label:'P1',type:'hook',slots:[]};
+    cabs.push({id,num,brand,pm,rows:[firstRow]});
+    activeCabId=id;
+  }
+  saveDB();closeMod('cab-modal');
+}
+function deleteCab(cabId){
+  const cab=cabs.find(c=>c.id===cabId);
+  confirm2('確認刪除櫃位','確定要刪除「'+(cab?cab.num+'櫃 '+cab.brand:'此櫃位')+'」嗎？所有陳列資料將消失。',()=>{
+    cabs=cabs.filter(c=>c.id!==cabId);
+    if(activeCabId===cabId)activeCabId=cabs.length?cabs[0].id:null;
+    saveDB();
+  });
+}
+function switchTab(cabId){activeCabId=cabId;sel.clear();render();}
+
+// ── rows ──
+function openAddRow(cabId){addRowCabId=cabId;openMod('row-type-modal');}
+function addRow(type){
+  const cab=cabs.find(c=>c.id===addRowCabId);if(!cab)return;
+  const pIdx=cab.rows.length;
+  if(type==='hook'){cab.rows.push({id:uid(),label:'P'+(pIdx+1),type:'hook',slots:[]});}
+  else{cab.rows.push({id:uid(),label:'P'+(pIdx+1),type:'shelf',items:[]});}
+  saveDB();closeMod('row-type-modal');
+}
+function deleteRow(cabId,rowId){
+  const cab=cabs.find(c=>c.id===cabId);const row=cab.rows.find(r=>r.id===rowId);
+  confirm2('確認刪除排列','確定要刪除「'+row.label+'」這一排嗎？',()=>{cab.rows=cab.rows.filter(r=>r.id!==rowId);saveDB();});
+}
+function addHookSlot(cabId,rowId){
+  const cab=cabs.find(c=>c.id===cabId);const row=cab.rows.find(r=>r.id===rowId);
+  if((row.slots||[]).length>=MAX_HOOKS){toast('此排已達上限 '+MAX_HOOKS+' 格');return;}
+  row.slots.push({id:uid(),layers:[],w:SLOT_W,h:SLOT_H});saveDB();
+}
+function deleteHookSlot(cabId,rowId,slotId){
+  const cab=cabs.find(c=>c.id===cabId);const row=cab.rows.find(r=>r.id===rowId);
+  confirm2('確認刪除格位','確定要刪除此格位及所有商品嗎？',()=>{
+    row.slots=row.slots.filter(s=>s.id!==slotId);sel.delete(cabId+'|'+rowId+'|'+slotId);saveDB();
+  });
+}
+
+// ── product modal ──
+function clearProdForm(){['pm-name','pm-code','pm-model','pm-qty'].forEach(i=>document.getElementById(i).value='');prodColor='c0';renderSwatches('prod-swatches',prodColor,c=>{prodColor=c;});}
+function fillProdForm(p){document.getElementById('pm-name').value=p.name||'';document.getElementById('pm-code').value=p.code||'';document.getElementById('pm-model').value=p.model||'';document.getElementById('pm-qty').value=p.qty||'';prodColor=p.color||'c0';renderSwatches('prod-swatches',prodColor,c=>{prodColor=c;});}
+function prodData(){return{id:uid(),name:document.getElementById('pm-name').value.trim(),code:document.getElementById('pm-code').value.trim(),model:document.getElementById('pm-model').value.trim(),qty:document.getElementById('pm-qty').value.trim(),color:prodColor};}
+function openAddLayerProd(cabId,rowId,slotId){prodTarget={mode:'hook-layer-new',cabId,rowId,slotId};clearProdForm();document.getElementById('prod-modal-title').textContent='新增商品';document.getElementById('paste-hint').textContent=clipboard?'剪貼簿：'+(clipboard.name||'（空）'):'';openMod('prod-modal');}
+function openEditLayerProd(cabId,rowId,slotId,layerIdx){const slot=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId).slots.find(s=>s.id===slotId);fillProdForm(slot.layers[layerIdx]);prodTarget={mode:'hook-layer-edit',cabId,rowId,slotId,layerIdx};document.getElementById('prod-modal-title').textContent='編輯商品';document.getElementById('paste-hint').textContent=clipboard?'剪貼簿：'+(clipboard.name||'（空）'):'';openMod('prod-modal');}
+function openAddShelfProd(cabId,rowId){prodTarget={mode:'shelf-new',cabId,rowId};clearProdForm();document.getElementById('prod-modal-title').textContent='新增層板商品';document.getElementById('paste-hint').textContent=clipboard?'剪貼簿：'+(clipboard.name||'（空）'):'';openMod('prod-modal');}
+function openEditShelfProd(cabId,rowId,itemIdx){const row=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId);fillProdForm(row.items[itemIdx]);prodTarget={mode:'shelf-edit',cabId,rowId,itemIdx};document.getElementById('prod-modal-title').textContent='編輯層板商品';document.getElementById('paste-hint').textContent=clipboard?'剪貼簿：'+(clipboard.name||'（空）'):'';openMod('prod-modal');}
+function saveProd(){
+  if(!prodTarget)return;
+  const{mode,cabId,rowId,slotId,layerIdx,itemIdx}=prodTarget;
+  const cab=cabs.find(c=>c.id===cabId);const row=cab.rows.find(r=>r.id===rowId);
+  if(mode==='hook-layer-new'){const slot=row.slots.find(s=>s.id===slotId);slot.layers.push(prodData());}
+  else if(mode==='hook-layer-edit'){const slot=row.slots.find(s=>s.id===slotId);slot.layers[layerIdx]={...slot.layers[layerIdx],...prodData()};}
+  else if(mode==='shelf-new'){if(!row.items)row.items=[];row.items.push(prodData());}
+  else if(mode==='shelf-edit'){row.items[itemIdx]={...row.items[itemIdx],...prodData()};}
+  saveDB();closeMod('prod-modal');
+}
+function pasteClip(){if(!clipboard){toast('剪貼簿是空的');return;}fillProdForm(clipboard);toast('已貼上');}
+
+// ── detail modal ──
+function openDetail(cabId,rowId,slotId,layerIdx){
+  const slot=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId).slots.find(s=>s.id===slotId);
+  const l=slot.layers[layerIdx];
+  detailTarget={type:'hook',cabId,rowId,slotId,layerIdx};
+  document.getElementById('dm-title').textContent=l.name||'（無名稱）';
+  const c=cs(l.color);
+  document.getElementById('dm-body').innerHTML=`<div style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c.bd};margin-right:6px;vertical-align:middle;"></div><b>代號</b>：${l.code||'—'}<br><b>樣式/型號</b>：${l.model||'—'}<br><b>數量</b>：${l.qty||'—'}`;
+  document.getElementById('dm-delete-btn').onclick=()=>{closeMod('detail-modal');deleteLayer(cabId,rowId,slotId,layerIdx);};
+  openMod('detail-modal');
+}
+function openShelfDetail(cabId,rowId,itemIdx){
+  const item=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId).items[itemIdx];
+  detailTarget={type:'shelf',cabId,rowId,itemIdx};
+  document.getElementById('dm-title').textContent=item.name||'（無名稱）';
+  const c=cs(item.color);
+  document.getElementById('dm-body').innerHTML=`<div style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c.bd};margin-right:6px;vertical-align:middle;"></div><b>代號</b>：${item.code||'—'}<br><b>樣式/型號</b>：${item.model||'—'}<br><b>數量</b>：${item.qty||'—'}`;
+  document.getElementById('dm-delete-btn').onclick=()=>{closeMod('detail-modal');deleteShelfItem(cabId,rowId,itemIdx);};
+  openMod('detail-modal');
+}
+function openEditFromDetail(){if(!detailTarget)return;closeMod('detail-modal');if(detailTarget.type==='hook')openEditLayerProd(detailTarget.cabId,detailTarget.rowId,detailTarget.slotId,detailTarget.layerIdx);else openEditShelfProd(detailTarget.cabId,detailTarget.rowId,detailTarget.itemIdx);}
+function deleteLayer(cabId,rowId,slotId,layerIdx){confirm2('確認刪除商品','確定要刪除此商品嗎？',()=>{const slot=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId).slots.find(s=>s.id===slotId);slot.layers.splice(layerIdx,1);saveDB();});}
+function deleteShelfItem(cabId,rowId,itemIdx){confirm2('確認刪除商品','確定要刪除此層板商品嗎？',()=>{const row=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId);row.items.splice(itemIdx,1);saveDB();});}
+
+// ── selection ──
+function selKey(cabId,rowId,slotId){return cabId+'|'+rowId+'|'+slotId;}
+function toggleSel(key,e){e.stopPropagation();sel.has(key)?sel.delete(key):sel.add(key);updateMultiBar();renderSelUI();}
+function clearSel(){sel.clear();updateMultiBar();renderSelUI();}
+function updateMultiBar(){const mb=document.getElementById('multi-bar');document.getElementById('sel-count').textContent=sel.size;if(sel.size>0){mb.classList.add('show');renderSwatches('bulk-swatches',null,cid=>applyBulkColor(cid));}else mb.classList.remove('show');}
+function applyBulkSize(){const w=document.getElementById('bw').value,h=document.getElementById('bh').value;const wv=w?Math.max(60,Math.min(400,parseInt(w))):null;const hv=h?Math.max(60,Math.min(400,parseInt(h))):null;if(!wv&&!hv){toast('請輸入寬或高');return;}let n=0;sel.forEach(key=>{const[cabId,rowId,slotId]=key.split('|');const cab=cabs.find(c=>c.id===cabId);if(!cab)return;const row=cab.rows.find(r=>r.id===rowId);if(!row||row.type!=='hook')return;const slot=row.slots.find(s=>s.id===slotId);if(!slot)return;if(wv)slot.w=wv;if(hv)slot.h=hv;n++;});saveDB();if(n)toast('已套用至 '+n+' 格');}
+function applyBulkColor(colorId){sel.forEach(key=>{const[cabId,rowId,slotId]=key.split('|');const cab=cabs.find(c=>c.id===cabId);if(!cab)return;const row=cab.rows.find(r=>r.id===rowId);if(!row)return;if(row.type==='hook'){const slot=row.slots.find(s=>s.id===slotId);if(slot)slot.layers.forEach(l=>l.color=colorId);}else{const idx=parseInt(slotId);if(!isNaN(idx)&&row.items[idx])row.items[idx].color=colorId;}});saveDB();toast('已套用顏色');}
+function renderSelUI(){document.querySelectorAll('[data-sel-key]').forEach(el=>el.classList.toggle('selected',sel.has(el.dataset.selKey)));}
+
+// ── swatches ──
+function renderSwatches(cid,activeId,cb){const c=document.getElementById(cid);if(!c)return;c._cb=cb;c.innerHTML=COLORS.map(col=>`<div class="swatch swatch-lg ${col.id===(activeId||'c0')?'active':''}" style="background:${col.hex};border-color:${col.id===(activeId||'c0')?'#111':'transparent'}" title="${col.label}" onclick="swatchClick(event,'${cid}','${col.id}')"></div>`).join('');}
+function swatchClick(e,cid,colorId){const c=document.getElementById(cid);c.querySelectorAll('.swatch').forEach(s=>{s.classList.remove('active');s.style.borderColor='transparent';});e.currentTarget.classList.add('active');e.currentTarget.style.borderColor='#111';if(c._cb)c._cb(colorId);}
+
+// ── drag hook slots ──
+function onHookDragStart(e,cabId,rowId,slotIdx){if(resizing)return;dragSlotKey={cabId,rowId,slotIdx};e.dataTransfer.effectAllowed='move';setTimeout(()=>e.target&&e.target.classList.add('dragging-slot'),0);}
+function onHookDragOver(e,cabId,rowId,slotIdx){if(!dragSlotKey)return;e.preventDefault();document.querySelectorAll('.hook-slot').forEach(el=>el.classList.remove('drag-over-slot'));e.currentTarget.classList.add('drag-over-slot');}
+function onHookDrop(e,cabId,rowId,slotIdx){e.preventDefault();document.querySelectorAll('.hook-slot').forEach(el=>el.classList.remove('drag-over-slot','dragging-slot'));if(!dragSlotKey)return;const srcCab=cabs.find(c=>c.id===dragSlotKey.cabId);const srcRow=srcCab.rows.find(r=>r.id===dragSlotKey.rowId);const dstCab=cabs.find(c=>c.id===cabId);const dstRow=dstCab.rows.find(r=>r.id===rowId);const[moved]=srcRow.slots.splice(dragSlotKey.slotIdx,1);const ins=dragSlotKey.rowId===rowId&&dragSlotKey.slotIdx<slotIdx?slotIdx-1:slotIdx;dstRow.slots.splice(ins<0?0:ins,0,moved);dragSlotKey=null;saveDB();}
+function onHookDragEnd(){document.querySelectorAll('.hook-slot').forEach(el=>el.classList.remove('drag-over-slot','dragging-slot'));dragSlotKey=null;}
+
+// ── drag shelf items ──
+function onShelfDragStart(e,cabId,rowId,itemIdx){dragShelfSrc={cabId,rowId,itemIdx};e.dataTransfer.effectAllowed='move';setTimeout(()=>e.target&&e.target.classList.add('dragging-shelf'),0);}
+function onShelfDragOver(e,cabId,rowId,itemIdx){if(!dragShelfSrc)return;e.preventDefault();document.querySelectorAll('.shelf-item').forEach(el=>el.classList.remove('drag-over-shelf'));e.currentTarget.classList.add('drag-over-shelf');}
+function onShelfDrop(e,cabId,rowId,itemIdx){e.preventDefault();document.querySelectorAll('.shelf-item').forEach(el=>el.classList.remove('drag-over-shelf','dragging-shelf'));if(!dragShelfSrc)return;if(dragShelfSrc.cabId===cabId&&dragShelfSrc.rowId===rowId){const row=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId);const[moved]=row.items.splice(dragShelfSrc.itemIdx,1);const ins=dragShelfSrc.itemIdx<itemIdx?itemIdx-1:itemIdx;row.items.splice(ins<0?0:ins,0,moved);}dragShelfSrc=null;saveDB();}
+function onShelfDragEnd(){document.querySelectorAll('.shelf-item').forEach(el=>el.classList.remove('drag-over-shelf','dragging-shelf'));dragShelfSrc=null;}
+
+// ── drag rows ──
+function onRowDragStart(e,cabId,rowIdx){if(resizing||dragSlotKey)return;dragRowKey={cabId,rowIdx};e.dataTransfer.effectAllowed='move';e.stopPropagation();}
+function onRowDragOver(e,cabId,rowIdx){if(!dragRowKey||dragRowKey.cabId!==cabId)return;e.preventDefault();e.currentTarget.classList.add('drag-over-row');}
+function onRowDragLeave(e){e.currentTarget.classList.remove('drag-over-row');}
+function onRowDrop(e,cabId,rowIdx){e.currentTarget.classList.remove('drag-over-row');if(!dragRowKey||dragRowKey.cabId!==cabId)return;e.preventDefault();if(dragRowKey.rowIdx===rowIdx){dragRowKey=null;return;}const cab=cabs.find(c=>c.id===cabId);const[moved]=cab.rows.splice(dragRowKey.rowIdx,1);cab.rows.splice(dragRowKey.rowIdx<rowIdx?rowIdx-1:rowIdx,0,moved);dragRowKey=null;saveDB();}
+
+// ── resize ──
+function startResize(e,cabId,rowId,slotId){e.stopPropagation();e.preventDefault();const slot=cabs.find(c=>c.id===cabId).rows.find(r=>r.id===rowId).slots.find(s=>s.id===slotId);const key=selKey(cabId,rowId,slotId),inSel=sel.has(key);const snaps=new Map();cabs.forEach(cab=>cab.rows.forEach(row=>{if(row.type!=='hook')return;row.slots.forEach(sl=>{const k=selKey(cab.id,row.id,sl.id);if(inSel?sel.has(k):k===key)snaps.set(k,{sl,sw:sl.w||SLOT_W,sh:sl.h||SLOT_H});});}));resizing={sx:e.clientX,sy:e.clientY,snaps};document.addEventListener('mousemove',doResize);document.addEventListener('mouseup',endResize);}
+function doResize(e){if(!resizing)return;const dx=e.clientX-resizing.sx,dy=e.clientY-resizing.sy;resizing.snaps.forEach(({sl,sw,sh})=>{sl.w=Math.max(60,Math.min(400,sw+dx));sl.h=Math.max(60,Math.min(400,sh+dy));const el=document.querySelector(`[data-slot-id="${CSS.escape(sl.id)}"]`);if(el){el.style.width=sl.w+'px';el.style.height=sl.h+'px';}});}
+function endResize(){if(resizing){saveDB();}resizing=null;document.removeEventListener('mousemove',doResize);document.removeEventListener('mouseup',endResize);}
+
+// ── save as image ──
+async function saveAsImage(){
+  const cab=activeCab();if(!cab){toast('請先選擇櫃位');return;}
+  toast('產生圖片中...',3000);
+  document.body.classList.add('screenshot-mode');
+  await new Promise(r=>setTimeout(r,100));
+  try{
+    const target=document.getElementById('main');
+    const canvas=await html2canvas(target,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false});
+    const link=document.createElement('a');
+    link.download=cab.num+'櫃_'+cab.brand+'_陳列圖.png';
+    link.href=canvas.toDataURL('image/png');
+    link.click();
+    toast('圖片已儲存！');
+  }catch(err){toast('截圖失敗，請重試');}
+  document.body.classList.remove('screenshot-mode');
+}
+
+// ── export / import (backup) ──
+function exportData(){const blob=new Blob([JSON.stringify({cabs},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='shelf_backup_'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(url);toast('備份下載完成');}
+function importTrigger(){document.getElementById('import-file').click();}
+function importData(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{
+      const imp=JSON.parse(ev.target.result);
+      const imported=imp.cabs||imp.cabinets||[];
+      if(!imported.length){toast('檔案無資料');return;}
+      imported.forEach(nc=>{if(!cabs.find(c=>c.id===nc.id))cabs.push(nc);});
+      if(!activeCabId&&cabs.length)activeCabId=cabs[0].id;
+      saveDB();toast('匯入成功，共 '+imported.length+' 個櫃位');
+    }catch{alert('匯入失敗，請確認檔案格式');}
+  };
+  r.readAsText(file);e.target.value='';
+}
+
+// ── render ──
+function render(){
+  // tabs
+  document.getElementById('tab-bar').innerHTML=
+    cabs.map(cab=>`<div class="tab ${cab.id===activeCabId?'active':''}" onclick="switchTab('${cab.id}')">
+      <span>${cab.num}櫃</span>
+      <span style="opacity:.55;font-size:10px;max-width:70px;overflow:hidden;text-overflow:ellipsis;">${cab.brand}</span>
+      <button class="tab-close" onclick="event.stopPropagation();deleteCab('${cab.id}')" title="刪除此櫃位"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>`).join('')
+    +`<div class="tab-add" onclick="openNewCab()" title="新增櫃位"><i class="ti ti-plus" aria-hidden="true"></i></div>`;
+
+  const main=document.getElementById('main');
+  const cab=activeCab();
+  if(!cab){
+    main.innerHTML=`<div class="empty-state"><i class="ti ti-layout-grid" aria-hidden="true"></i><p>點擊上方 <strong>＋</strong> 新增第一個櫃位開始規劃</p></div>`;
+    updateMultiBar();return;
+  }
+
+  const rowsHTML=(cab.rows||[]).map((row,ri)=>{
+    const isHook=row.type==='hook';
+    const sidebar=`<div class="row-sidebar" draggable="true"
+        ondragstart="onRowDragStart(event,'${cab.id}',${ri})"
+        ondragover="onRowDragOver(event,'${cab.id}',${ri})"
+        ondragleave="onRowDragLeave(event)"
+        ondrop="onRowDrop(event,'${cab.id}',${ri})">
+      <i class="ti ti-grip-vertical row-grip" aria-hidden="true"></i>
+      <div class="row-label">${row.label}</div>
+      <div class="row-type-tag ${isHook?'hook-tag':'shelf-tag'}">${isHook?'勾子':'層板'}</div>
+      <div class="row-count">${isHook?(row.slots||[]).length+'格':(row.items||[]).length+'項'}</div>
+      ${isHook?`<button class="row-sidebar-btn" title="新增格" onclick="addHookSlot('${cab.id}','${row.id}')"><i class="ti ti-square-plus" aria-hidden="true"></i></button>`:''}
+      <button class="row-sidebar-btn red" title="刪除此排" onclick="deleteRow('${cab.id}','${row.id}')"><i class="ti ti-trash" aria-hidden="true"></i></button>
+    </div>`;
+
+    let content='';
+    if(isHook){
+      const slots=row.slots||[];
+      const slotsHTML=slots.map((slot,si)=>{
+        const key=selKey(cab.id,row.id,slot.id);const isSel=sel.has(key);
+        const w=slot.w||SLOT_W,h=slot.h||SLOT_H;
+        const layers=slot.layers||[];
+        const layersHTML=layers.length===0
+          ?`<div class="slot-empty"><i class="ti ti-plus" aria-hidden="true"></i></div>`
+          :layers.map((l,li)=>{const c=cs(l.color);return`<div class="hook-layer" style="background:${c.bg};" onclick="event.stopPropagation();openDetail('${cab.id}','${row.id}','${slot.id}',${li})">
+              <div class="l-name">${l.name||'（無名稱）'}</div>
+              ${l.model?`<div class="l-model">${l.model}</div>`:''}
+              ${l.qty?`<div class="l-qty">×${l.qty}</div>`:''}
+            </div>`;}).join('');
+        const addBtn=layers.length>0?`<button class="slot-add-btn" onclick="event.stopPropagation();openAddLayerProd('${cab.id}','${row.id}','${slot.id}')"><i class="ti ti-plus" aria-hidden="true"></i> 新增商品</button>`:'';
+        return`<div class="hook-slot ${isSel?'selected':''}" data-slot-id="${slot.id}" data-sel-key="${key}"
+          style="width:${w}px;height:${h}px;border-color:${isSel?'#2563eb':'#ddd'};"
+          draggable="true"
+          ondragstart="onHookDragStart(event,'${cab.id}','${row.id}',${si})"
+          ondragover="onHookDragOver(event,'${cab.id}','${row.id}',${si})"
+          ondrop="onHookDrop(event,'${cab.id}','${row.id}',${si})"
+          ondragend="onHookDragEnd()"
+          onclick="openAddLayerProd('${cab.id}','${row.id}','${slot.id}')">
+          <div class="slot-topbar">
+            <span class="slot-lbl">L${si+1}</span>
+            <button class="slot-del-btn" onclick="event.stopPropagation();deleteHookSlot('${cab.id}','${row.id}','${slot.id}')"><i class="ti ti-x" aria-hidden="true"></i></button>
+          </div>
+          <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">${layersHTML}</div>
+          ${addBtn}
+          <div class="sel-dot" onclick="toggleSel('${key}',event)" title="選取/取消"></div>
+          <div class="resize-handle" onmousedown="startResize(event,'${cab.id}','${row.id}','${slot.id}')"></div>
+        </div>`;
+      }).join('');
+      const ghost=slots.length<MAX_HOOKS
+        ?`<div class="add-slot-ghost" onclick="addHookSlot('${cab.id}','${row.id}')" title="新增格位" style="width:${SLOT_W}px;height:${SLOT_H}px;"><i class="ti ti-plus" aria-hidden="true"></i></div>`:'';
+      content=`<div class="hook-row-inner">${slotsHTML}${ghost}</div>`;
+    }else{
+      const items=row.items||[];
+      const itemsHTML=items.map((item,ii)=>{
+        const c=cs(item.color);const key=selKey(cab.id,row.id,String(ii));
+        return`<div class="shelf-item ${sel.has(key)?'selected':''}" data-sel-key="${key}"
+          style="background:${c.bg};border-color:${sel.has(key)?'#2563eb':c.bd};height:${SHELF_H}px;"
+          draggable="true"
+          ondragstart="onShelfDragStart(event,'${cab.id}','${row.id}',${ii})"
+          ondragover="onShelfDragOver(event,'${cab.id}','${row.id}',${ii})"
+          ondrop="onShelfDrop(event,'${cab.id}','${row.id}',${ii})"
+          ondragend="onShelfDragEnd()"
+          onclick="openShelfDetail('${cab.id}','${row.id}',${ii})">
+          <div class="si-dot" style="background:${c.bd}"></div>
+          <div class="si-name">${item.name||'（無名稱）'}</div>
+          ${item.model?`<div class="si-model">${item.model}</div>`:''}
+          ${item.qty?`<div class="si-qty">×${item.qty}</div>`:''}
+          <div class="sel-dot-shelf" onclick="toggleSel('${key}',event)" title="選取/取消"></div>
+        </div>`;
+      }).join('');
+      const addBtn=`<div class="shelf-add-slot" onclick="openAddShelfProd('${cab.id}','${row.id}')" style="height:${SHELF_H}px;"><i class="ti ti-plus" aria-hidden="true" style="font-size:20px;"></i><span>新增</span></div>`;
+      content=`<div class="shelf-row-inner">${itemsHTML}${addBtn}</div>`;
+    }
+
+    return`<div class="row-wrap">
+      ${sidebar}
+      <div class="slots-area">${content}</div>
+    </div>`;
+  }).join('');
+
+  main.innerHTML=`<div class="cab-page">
+    <div class="cab-title">${cab.num}櫃 — ${cab.brand}</div>
+    ${cab.pm?`<div class="cab-sub">PM：${cab.pm}</div>`:'<div class="cab-sub"></div>'}
+    <div class="cab-actions">
+      <button onclick="openEditCab('${cab.id}')"><i class="ti ti-edit" aria-hidden="true"></i> 編輯資訊</button>
+      <button class="save-img-btn" onclick="saveAsImage()"><i class="ti ti-camera" aria-hidden="true"></i> 另存陳列圖</button>
+    </div>
+    <div class="rows-container">${rowsHTML}</div>
+    <div class="add-row-btn">
+      <button onclick="openAddRow('${cab.id}')"><i class="ti ti-plus" aria-hidden="true"></i> 新增排列</button>
+    </div>
+  </div>`;
+  updateMultiBar();renderSelUI();
+}
+
+render();
+</script>
+</body>
+</html>
